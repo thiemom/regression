@@ -1,0 +1,172 @@
+---
+title: "Regression"
+author: "thiemo.meeuwissen@gmail.com"
+date: "Friday, November 21, 2014"
+output:
+  pdf_document: default
+  html_document:
+    theme: cosmo
+theme: united
+---
+
+This is my analysis for the assignment in the Coursera Regression course by Brian Caffo from the John Hopkins University.
+
+### Context
+
+For this assignment I work for Motor Trend, a magazine about the automobile industry. Looking at a data set of a collection of cars, they are interested in exploring the relationship between a set of variables and miles per gallon (mpg). They are particularly interested in the following two questions:
+
+- “Is an automatic or manual transmission better for mpg”
+- "Quantify the mpg difference between automatic and manual transmissions"
+
+### Data
+
+The data for this assignment is the mtcars data set. So what is this data about? Checking the help provides the required insight.
+
+The data was extracted from the 1974 Motor Trend US magazine, and comprises fuel consumption and 10 aspects of automobile design and performance for 32 automobiles (1973–74 models). 
+
+The data format is data frame with 32 observations on 11 variables. 
+
+[, 1]  mpg  Miles/(US) gallon  
+[, 2]  cyl  Number of cylinders  
+[, 3]  disp  Displacement (cu.in.)  
+[, 4]  hp  Gross horsepower  
+[, 5]  drat  Rear axle ratio  
+[, 6]  wt  Weight (lb/1000)  
+[, 7]  qsec  1/4 mile time  
+[, 8]  vs  V/S  
+[, 9]  am  Transmission (0 = automatic, 1 = manual)  
+[,10]  gear  Number of forward gears  
+[,11]  carb  Number of carburetors  
+
+The data source is Henderson and Velleman (1981), Building multiple regression models interactively. Biometrics, 37, 391–411. 
+
+I started by giving the data a quick str to see what the data structure looks like.
+
+```{r, echo=TRUE, results='hide'}
+data(mtcars)
+str(mtcars)
+```
+
+It turned out all features have numeric data types. Because from the description it is clear some features, including the "am" feature I'll be studying, are really factors, I'll convert the data types before starting the analysis.
+
+In addition, the unit "Miles per Gallon" is not ideal. Based on the physics involved a better measure would be "Gallon per Miles". This is discussed in more detail on for example http://www.mpgillusion.com. I created a new variable gpm to reflect this. To make the numbers "nicer" the unit will be gallon per 10'000 miles.
+
+
+```{r}
+mtcars$gpm <- 10000/mtcars$mpg
+mtcars$vs <- factor(mtcars$vs, labels=c("V","Straight"))
+mtcars$am <- factor(mtcars$am, labels=c("Automatic","Manual"))
+```
+Now let's look at the transformed data structure.
+```{r, echo=FALSE}
+str(mtcars)
+```
+
+### Exploratory Data Analysis (EDA)
+
+For convenience we create a dataframe where we use gpm as outcome and remove mpg. This dataframe will be called fmtcars.
+
+```{r, echo=TRUE, results='hide'}
+fmtcars <- subset(mtcars, select=-mpg)
+```
+
+Next, we check the data distribution for the first question to be answered “Is an automatic or manual transmission better for mpg”.
+
+```{r, echo=FALSE}
+boxplot(gpm~am, data = fmtcars,
+        xlab = "Gearbox",
+        ylab = "Gallons per 10'000 Miles",
+        main = "Car Milage")
+```
+
+The mean gpm of cars with manual transmission is about 200 gpms lower than that of cars with automatic transmission. Let's run a t-test to check if the difference is significant. As null hypothesis we formulate that cars with automatic transmission are having equal mileage than cars with manual transmission.
+
+```{r}
+t <- t.test(fmtcars[fmtcars$am=="Automatic",]$gpm,
+            fmtcars[fmtcars$am=="Manual",]$gpm)
+```
+
+```{r, echo=FALSE}
+print(t)
+
+cat("The p-value is",t$p.value,"so we and reject the null hypothesis and conclude that within the dataset the difference between automatic and manual transmission is significant.")
+```
+
+However, to conclude that the difference is actually caused by the tranmission type is not clear yet. To This conclusion would be true only if all other characteristics are the same. For example, cars with automatic transimission should have the same weight and horsepower distribution and relation as cars with manual transmission). As can be seen from the scatter matrix plot in the appendix this is not the case here.
+
+## Correlation Analysis
+
+To get an idea of the relation between gpm and the other features we have a look at the linear correlation between gpm and other features.
+```{r}
+sort(cor(fmtcars[11], fmtcars[c(1:6,9:10)])[1,])
+```
+
+The correlations confirm what we learned from the scatter plots in the appendix. Increased power, weight, displacement, cylinders and carburators are correlated with increased fuel consumption. Quarter mile time, number of forward gearsand rear axle ratio are correlated with decreased fuel consumption. Moreover, it looks like weight, displacement and horsepower are the most relevant features. What we do not see is the effect of the categorical features. 
+
+## Multivariate Linear Regression
+
+First let's just create a model using all features without interactions.
+
+```{r}
+fit <- lm(gpm~., data = fmtcars)
+summary(fit)
+```
+To select the "best model" we will use the step method which runs lm multiple times and select the best variables. The command and result are shown below.
+```{r, echo=TRUE, results='hide'}
+bestfit <- step(fit, direction="both")
+```
+```{r, echo=TRUE}
+summary(bestfit)
+```
+Now interestingly enough, the transmission is NOT included in the final model. SO we could conclude that transmission is not significant in preduction fuel consumption.
+
+The model explains 85% of the variance in gallons per mile (gpm). Moreover, we see that weight is the main feature related to milage. 
+
+## Further Discussion
+
+To double check the obtained result we create and alternative model where we add transmission (am) to the best model and check if there is indeed no signinficatn improvement.
+
+```{r, echo=TRUE, results='hide'}
+altfit <- lm(gpm ~ disp + wt + carb + am, data = fmtcars)
+```
+
+```{r, echo=TRUE, results='show'}
+anova(bestfit, altfit)
+```
+The p-value is 0.8898, so we accept the null hypothesis and claim that transmission is indeed not significant in predicting fuel consumption.
+
+As discussed above, miles per gallon is actually not a good measure of fuel consumption which is why we used gallons per 10'000 miles instead. But, what would happen if we stick to strickly answering the questions posed for the assignment.
+
+- “Is an automatic or manual transmission better for mpg”
+- "Quantify the mpg difference between automatic and manual transmissions"
+
+Following the same analysis as above and just skipping straight to the final result yields.
+
+```{r, echo=TRUE, results='hide'}
+data(mtcars)
+fit <- lm(mpg~., data = mtcars)
+bestfit <- step(fit, direction="both")
+```
+```{r, echo=TRUE}
+summary(bestfit)
+```
+
+So now manual transmission cars have 2.9 mpgs more than automatic transmission cars. However this effect is much less strong than weight and acceleration (qsec). However, as shown before, if we try to answer the underlying question if automatic transmission increases fuel consumption the answer is no. 
+
+I conclude that tranmission type is not relevant for fuel consumption prediction, at least within the data available in the mtcars dataset. However, tranmission type is relevant for miles per gallon prediction. More material to fuel the miles per gallon illusion discussion!
+
+## Appendix
+
+```{r, echo=FALSE, results='hide'}
+require(car)
+```
+
+```{r, echo=FALSE}
+scatterplotMatrix(~gpm+wt+hp+disp+drat+qsec|am,
+                  data=fmtcars,
+                  main="Car Milage by Transmission")
+
+scatterplotMatrix(~gpm+wt+hp+disp+drat+qsec|cyl,
+                  data=fmtcars,
+                  main="Car Milage by Cylinders")
+```
